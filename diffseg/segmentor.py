@@ -144,6 +144,16 @@ class DiffSeg:
 
     return M_final
   
+  # def segment(self, weight_32_, weight_32, weight_16, weight_8, weight_ratio = None):
+  #   M_list = []
+  #   for i in range(len(weight_32)):
+  #     # Step 1: Attention Aggregation
+  #     weights = self.aggregate_weights([weight_32[i],weight_32[i], weight_16[i], weight_8[i]],weight_ratio=weight_ratio)
+  #     # Step 2 & 3: Iterative Merging & NMS
+  #     M_final = self.generate_masks(weights, self.kl_threshold, self.grid)
+  #     M_list.append(M_final)
+  #   return np.array(M_list)
+
   def segment(self, weight_64, weight_32, weight_16, weight_8, weight_ratio = None):
     M_list = []
     for i in range(len(weight_64)):
