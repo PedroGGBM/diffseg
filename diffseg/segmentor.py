@@ -28,7 +28,7 @@ class DiffSeg:
     x_new,y_new=np.meshgrid(x_new,y_new,indexing='ij')
     points = np.concatenate(([x_new.reshape(-1,1),y_new.reshape(-1,1)]),axis=-1).astype(int)
     return points
-  
+
   def get_weight_rato(self, weight_list):
     # This function assigns proportional aggergation weight 
     sizes = []
