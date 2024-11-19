@@ -1115,6 +1115,11 @@ def forward(
             If `return_dict` is True, an [`~models.unets.unet_2d_condition.UNet2DConditionOutput`] is returned,
             otherwise a `tuple` is returned where the first element is the sample tensor.
     """
+    # ----------`edit`
+    # Verify encoder_hidden_states existence [DEBUG]
+    print(f"Encoder hidden state shape: {encoder_hidden_states.shape}")
+    # ----------
+
     # By default samples have to be AT least a multiple of the overall upsampling factor.
     # The overall upsampling factor is equal to 2 ** (# num of upsampling layers).
     # However, the upsampling interpolation output size can be forced to fit any upsampling size
@@ -1123,6 +1128,7 @@ def forward(
 
     # weight variable init
     # ----------`edit`
+    # Intialize weight storage vars
     weight_64, weight_32, weight_16, weight_8 = None, None, None, None
     x_weights_64, x_weights_32, x_weights_16, x_weights_8 = None, None, None, None
     # ----------
