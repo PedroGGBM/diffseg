@@ -7,7 +7,7 @@
 # utilities
 import tensorflow as tf
 import copy
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 import numpy as np
 from collections import defaultdict
 
@@ -35,16 +35,16 @@ class DiffSeg:
           Uses linear spacing and mesh grid generation to distribute points evenly across the image.
     """
 
-    segment_len = 63//(num_of_points-1)
-    total_len = segment_len*(num_of_points-1)
-    start_point = (63 - total_len)//2
-    x_new = np.linspace(start_point, total_len+start_point, num_of_points)
-    y_new = np.linspace(start_point, total_len+start_point, num_of_points)
-    x_new,y_new=np.meshgrid(x_new,y_new,indexing='ij')
-    points = np.concatenate(([x_new.reshape(-1,1),y_new.reshape(-1,1)]),axis=-1).astype(int)
+    segment_len = 63 // (num_of_points - 1)
+    total_len = segment_len * (num_of_points - 1)
+    start_point = (63 - total_len) // 2
+    x_new = np.linspace(start_point, total_len + start_point, num_of_points)
+    y_new = np.linspace(start_point, total_len + start_point, num_of_points)
+    x_new, y_new = np.meshgrid(x_new, y_new, indexing='ij')
+    points = np.concatenate(([x_new.reshape(-1,1), y_new.reshape(-1,1)]), axis=-1).astype(int)
     return points
 
-  def get_weight_rato(self, weight_list):
+  def get_weight_ratio(self, weight_list):
     """
       - Intuition:
           To fairly combine several different-sizes images/feature maps, it calculates a "weight"
@@ -62,6 +62,10 @@ class DiffSeg:
     denom = np.sum(sizes)
     
     return sizes / denom
+  
+    # SUGGESTED IMPROVEMENT (np arr)
+    # size = np.array([np.sqrt(w.shape[-2]) for w in weight_list])
+    # return size / size.sum()
 
   def aggregate_weights(self, weight_list, weight_ratio=None):
     """
@@ -78,17 +82,23 @@ class DiffSeg:
 
     if weight_ratio is None:
       weight_ratio = self.get_weight_rato(weight_list)
-    aggre_weights = np.zeros((64,64,64,64))
+    
+    aggre_weights = np.zeros((64,64,64,64), dtype=np.float32)
    
-    for index,weights in enumerate(weight_list):
+    for index, weights in enumerate(weight_list):
       size = int(np.sqrt(weights.shape[-1]))
       ratio = int(64/size)
+      
       # Average over the multi-head channel
-      weights = weights.mean(0).reshape(-1,size,size)
+      weights = weights.mean(0).reshape(-1, size, size)
 
       # Upsample the last two dimensions to 64 x 64
       weights = tf.keras.layers.UpSampling2D(size=(ratio, ratio), data_format="channels_last", interpolation='bilinear')(tf.expand_dims(weights,axis=-1))
       weights = tf.reshape(weights,(size,size,64,64))
+
+      # SUGGESTED IMPROVEMENT
+      # weights = tf.image.resize(weights, [64, 64], method='bilinear')
+      # weights /= tf.reduce_sum(weights, axis=(1, 2), keepdims=True)
 
       # Normalize to make sure each map sums to one
       weights = weights/tf.math.reduce_sum(weights,(2,3),keepdims=True)
@@ -99,6 +109,7 @@ class DiffSeg:
 
       # Aggrgate accroding to weight_ratio
       aggre_weights += weights*weight_ratio[index]
+
     return aggre_weights.numpy().astype(np.double)
 
   def aggregate_x_weights(self, weight_list, weight_ratio=None):

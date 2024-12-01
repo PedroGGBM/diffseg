@@ -54,7 +54,7 @@ The following are optimization recommendations for the image segmentor in DiffSe
 
 ### - Action:
 
-  - Perform initial dimensionality reduction using PCA or a similar method to reduce the number of features KMeans must handle.
+  - Perform initial dimensionality reduction using PCA (principal component analysis) or a similar method to reduce the number of features KMeans must handle.
   - If your data size is large, consider mini-batch KMeans from the sklearn library which approximates results more efficiently.
 
 ```other`

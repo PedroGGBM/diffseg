@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import diffusers
@@ -65,12 +65,20 @@ class UNet2DConditionOutput(BaseOutput):
     Args:
         sample (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
             The hidden states output conditioned on `encoder_hidden_states` input. Output of last layer of model.
+        down_weights (Optional[`torch.Tensor`]): 
+            Optional tensor representing the down-sampling weights used in the model.
+        up_weights (Optional[`torch.Tensor`]): 
+            Optional tensor representing the up-sampling weights used in the model.
     """
 
     sample: torch.Tensor = None
 
+    # --------> [MODIFICATION]
+    down_weights: Optional[torch.Tensor] = field(default=None)
+    up_weights: Optional[torch.Tensor] = field(default=None)
+    # <--------- [MODIFICATION]
 
-class UNet2DConditionModel(
+class UNet2DConditionModelModified(
     ModelMixin, ConfigMixin, FromOriginalModelMixin, UNet2DConditionLoadersMixin, PeftAdapterMixin
 ):
     r"""
@@ -229,6 +237,11 @@ class UNet2DConditionModel(
         super().__init__()
 
         self.sample_size = sample_size
+
+        # --------> [MODIFICATION]
+        self.down_weights = None
+        self.up_weights = None
+        # <-------- [MODIFICATION]
 
         if num_attention_heads is not None:
             raise ValueError(
@@ -1109,6 +1122,11 @@ class UNet2DConditionModel(
         forward_upsample_size = False
         upsample_size = None
 
+        # --------> [MODIFICATION]
+        down_weights = {}
+        up_weights   = {}
+        # <-------- [MODIFICATION]
+
         for dim in sample.shape[-2:]:
             if dim % default_overall_up_factor != 0:
                 # Forward upsample size to force interpolation output size.
@@ -1207,8 +1225,9 @@ class UNet2DConditionModel(
             down_intrablock_additional_residuals = down_block_additional_residuals
             is_adapter = True
 
+        # --------> [MODIFICATION]
         down_block_res_samples = (sample,)
-        for downsample_block in self.down_blocks:
+        for i, downsample_block in enumerate(self.down_blocks):
             if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
                 # For t2i-adapter CrossAttnDownBlock2D
                 additional_residuals = {}
@@ -1230,6 +1249,14 @@ class UNet2DConditionModel(
                     sample += down_intrablock_additional_residuals.pop(0)
 
             down_block_res_samples += res_samples
+
+            # Store weights w/ their resolution
+            down_weights[f'weight_{sample.shape[-1]}'] = sample.clone()
+            # 
+            # 
+            # 
+            # print(f'Down Block {i}: weight_{sample.shape[-1]} - Shape: {sample.shape}')
+        # <-------- [MODIFICATION]
 
         if is_controlnet:
             new_down_block_res_samples = ()
@@ -1267,6 +1294,7 @@ class UNet2DConditionModel(
         if is_controlnet:
             sample = sample + mid_block_additional_residual
 
+        # --------> [MODIFICATION]
         # 5. up
         for i, upsample_block in enumerate(self.up_blocks):
             is_final_block = i == len(self.up_blocks) - 1
@@ -1298,6 +1326,11 @@ class UNet2DConditionModel(
                     upsample_size=upsample_size,
                 )
 
+            # Store weights with their resolution
+            up_weights[f'x_weight_{sample.shape[-1]}'] = sample.clone()
+            # print(f'Up Block {i}: x_weight_{sample.shape[-1]} - Shape: {sample.shape}')
+        # <-------- [MODIFICATION]
+
         # 6. post-process
         if self.conv_norm_out:
             sample = self.conv_norm_out(sample)
@@ -1309,6 +1342,6 @@ class UNet2DConditionModel(
             unscale_lora_layers(self, lora_scale)
 
         if not return_dict:
-            return (sample,)
+            return (sample, down_weights, up_weights)
 
-        return UNet2DConditionOutput(sample=sample)
+        return UNet2DConditionOutput(sample=sample, down_weights=down_weights, up_weights=up_weights)
